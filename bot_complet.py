@@ -6,6 +6,20 @@ from dotenv import load_dotenv
 import aiohttp
 import os
 
+from aiohttp import web
+import asyncio
+
+async def handle(request):
+    return web.Response(text="Bot en ligne !")
+
+async def start_webserver():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", 8080)
+    await site.start()
+
 load_dotenv()
 
 client_ai = AsyncOpenAI(
@@ -249,4 +263,8 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
-bot.run(os.environ.get("DISCORD_TOKEN"))
+async def main():
+    await start_webserver()
+    await bot.start(os.environ.get("DISCORD_TOKEN"))
+
+asyncio.run(main())
