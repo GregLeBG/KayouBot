@@ -4,6 +4,7 @@ from discord import app_commands
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 import aiohttp
+import os
 
 load_dotenv()
 
