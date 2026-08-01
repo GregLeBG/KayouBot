@@ -652,6 +652,30 @@ async def on_message(
 # LANCEMENT DU BOT
 # ============================================================
 
+import threading
+from flask import Flask
+
+app = Flask(__name__)
+
+
+@app.route("/")
+def home():
+    return "KayouBot est en ligne !"
+
+
+def lancer_serveur_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
+
+
+threading.Thread(
+    target=lancer_serveur_web,
+    daemon=True
+).start()
+
 print("🚀 Démarrage de KayouBot...")
 
 bot.run(DISCORD_TOKEN)
