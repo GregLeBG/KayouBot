@@ -2,6 +2,7 @@ import io
 import os
 import urllib.parse
 import asyncio
+import time
 import aiohttp
 import discord
 
@@ -9,6 +10,9 @@ from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
 from google import genai
+
+import threading
+from flask import Flask
 
 
 # ============================================================
@@ -20,21 +24,27 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
-# Modèle Gemini utilisé pour le texte
-GEMINI_MODEL = "gemini-2.5-flash"
+# Dernier modèle Gemini utilisé
+GEMINI_MODEL = "gemini-3.5-flash"
 
 if not GEMINI_API_KEY:
     raise ValueError(
-        "❌ GEMINI_API_KEY est introuvable dans le fichier .env"
+        "❌ GEMINI_API_KEY est introuvable."
     )
 
 if not DISCORD_TOKEN:
     raise ValueError(
-        "❌ DISCORD_TOKEN est introuvable dans le fichier .env"
+        "❌ DISCORD_TOKEN est introuvable."
     )
 
-# Client officiel Google Gemini
-client_ai = genai.Client(api_key=GEMINI_API_KEY)
+
+# ============================================================
+# CLIENT GEMINI
+# ============================================================
+
+client_ai = genai.Client(
+    api_key=GEMINI_API_KEY
+)
 
 
 # ============================================================
@@ -51,39 +61,121 @@ bot = commands.Bot(
 
 
 # ============================================================
-# HISTORIQUE DES CONVERSATIONS
+# SERVEUR FLASK POUR RENDER
+# ============================================================
+
+app = Flask(__name__)
+
+
+@app.route("/")
+def home():
+    return "KayouBot est en ligne !"
+
+
+def lancer_serveur_web():
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            10000
+        )
+    )
+
+    print(
+        f"🌐 Serveur Flask démarré sur le port {port}"
+    )
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
+
+
+threading.Thread(
+    target=lancer_serveur_web,
+    daemon=True
+).start()
+
+
+# ============================================================
+# HISTORIQUE
 # ============================================================
 
 conversation_history: dict[int, list] = {}
 
 SYSTEM_PROMPT = (
-    "Tu es KayouBot, un assistant IA sympa et serviable sur un serveur Discord. "
-    "Tu réponds toujours en français sauf si l'utilisateur demande une autre langue. "
+    "Tu es KayouBot, un assistant IA sympa et serviable "
+    "sur un serveur Discord. "
+    "Tu réponds toujours en français sauf si l'utilisateur "
+    "demande une autre langue. "
     "Tu réponds de façon claire, naturelle et concise. "
     "Tu peux utiliser des emojis avec modération. "
-    "Si une réponse est longue, utilise du Markdown compatible avec Discord."
+    "Si une réponse est longue, utilise du Markdown "
+    "compatible avec Discord."
 )
 
 
 # ============================================================
-# FONCTION GEMINI GÉNÉRALE
+# GEMINI
 # ============================================================
 
 async def demander_gemini(prompt: str) -> str:
-    """
-    Envoie une demande à Gemini dans un thread séparé.
-    Le SDK Google GenAI est synchrone, donc on utilise asyncio.to_thread()
-    pour ne pas bloquer le bot Discord.
-    """
 
     def appel_gemini():
-        response = client_ai.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-        )
-        return response.text or ""
 
-    return await asyncio.to_thread(appel_gemini)
+        dernier_erreur = None
+
+        for tentative in range(3):
+
+            try:
+
+                print(
+                    f"🤖 Requête Gemini "
+                    f"(tentative {tentative + 1}/3)"
+                )
+
+                response = client_ai.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                )
+
+                return response.text or ""
+
+            except Exception as e:
+
+                dernier_erreur = e
+
+                erreur = str(e)
+
+                print(
+                    f"❌ Erreur Gemini : {erreur}"
+                )
+
+                if (
+                    "503" in erreur
+                    or "UNAVAILABLE" in erreur
+                    or "429" in erreur
+                    or "RESOURCE_EXHAUSTED" in erreur
+                ):
+
+                    if tentative < 2:
+
+                        print(
+                            "⏳ Gemini est temporairement "
+                            "indisponible."
+                        )
+
+                        time.sleep(3)
+
+                    continue
+
+                raise
+
+        raise dernier_erreur
+
+    return await asyncio.to_thread(
+        appel_gemini
+    )
 
 
 # ============================================================
