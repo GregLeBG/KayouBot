@@ -1,4 +1,4 @@
 discord.py==2.3.2
-google-genai==3.5
+google-genai==2.16.0
 aiohttp==3.11.18
 python-dotenv==1.0.1
